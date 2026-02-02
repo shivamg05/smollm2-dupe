@@ -4,7 +4,7 @@ import math
 
 HIDDEN_DIM = 576
 INTERMEDIATE_DIM = 1536
-VOCAB_SIZE = 49512
+VOCAB_SIZE = 49152
 
 class SmolLM2(nn.Module):
     
