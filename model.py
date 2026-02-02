@@ -4,6 +4,37 @@ import math
 
 HIDDEN_DIM = 576
 INTERMEDIATE_DIM = 1536
+VOCAB_SIZE = 49512
+
+class SmolLM2(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+        self.emb = nn.Embedding(VOCAB_SIZE, HIDDEN_DIM)
+        self.norm = nn.RMSNorm(HIDDEN_DIM, eps=1e-5)
+        self.layers = nn.ModuleList([TransformerBlock() for _ in range(30)])
+    
+    def forward(self, x, kv_cache=None, use_cache=False):
+        x = self.emb(x)
+
+        new_kv_cache = [] if use_cache else None
+
+        for i, block in enumerate(self.layers):
+            layer_cache = kv_cache[i] if kv_cache is not None else None
+            x, updated_kv = block(x, kv_cache=layer_cache)
+
+            if use_cache:
+                new_kv_cache.append(updated_kv)
+
+
+        x = self.norm(x)
+        logits = x @ self.emb.weight.T
+
+        if use_cache:
+            return logits, new_kv_cache
+        else:
+            return logits
+
 
 class TransformerBlock(nn.Module):
 
