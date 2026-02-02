@@ -28,7 +28,7 @@ class TransformerBlock(nn.Module):
 
 class GroupedQueryAttention(nn.Module):
 
-    def __init__(self):
+    def __init__(self, dropout: int = 0.05):
         super().__init__()
         self.num_q_heads = 9
         self.num_kv_heads = 3
@@ -39,6 +39,7 @@ class GroupedQueryAttention(nn.Module):
         self.v_proj = nn.Linear(HIDDEN_DIM, self.head_dim * self.num_kv_heads, bias=False)
         self.o_proj = nn.Linear(HIDDEN_DIM, HIDDEN_DIM, bias=False)
         self.rotary_emb = RotaryEmbedding(dim=self.head_dim)
+        self.dropout = nn.Dropout(dropout)
     
 
     def _apply_rotary(self, x, cos, sin):
@@ -81,6 +82,7 @@ class GroupedQueryAttention(nn.Module):
         attn_scores = attn_scores.masked_fill(~mask, float("-inf"))
 
         attn_probs = torch.softmax(attn_scores, dim=-1)
+        attn_probs = self.dropout(attn_probs)
         c = torch.matmul(attn_probs, v)
 
         #merge heads
@@ -146,12 +148,13 @@ class RotaryEmbedding(nn.Module):
 
 class SwiGLU(nn.Module):
 
-    def __init__(self, dtype=torch.bfloat16, init_std: float = 0.041666666666666664):
+    def __init__(self, dtype=torch.bfloat16, init_std: float = 0.041666666666666664, dropout: int = 0.05):
         super().__init__()
         self.activation = nn.SiLU()
         self.gate_proj = nn.Linear(HIDDEN_DIM, INTERMEDIATE_DIM, bias=False, dtype=dtype)
         self.up_proj = nn.Linear(HIDDEN_DIM, INTERMEDIATE_DIM, bias=False, dtype=dtype)
         self.down_proj = nn.Linear(INTERMEDIATE_DIM, HIDDEN_DIM, bias=False, dtype=dtype)
+        self.dropout = nn.Dropout(dropout)
 
         self.reset_parameters(init_std)
 
@@ -168,6 +171,8 @@ class SwiGLU(nn.Module):
         gate = self.activation(self.gate_proj(x)) #also apply silu activation to gate projection
         up = self.up_proj(x)
         #multiply gate by up, re-project to 576-dim vector
-        x = self.down_proj(gate * up)
+        x = gate * up
+        x = self.dropout(x)
+        x = self.down_proj(x)
         #output: 576-dim vector
         return x
