@@ -15,20 +15,21 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.RMSNorm(HIDDEN_DIM, eps=1e-5)
         
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, kv_cache=None) -> torch.Tensor:
         #input: 576-dim vector
 
         #normalize, pass through GQA, residual connection
-        x = x + self.attn(self.norm1(x))
+        attn_out, updated_kv = self.attn(self.norm1(x), kv_cache=kv_cache)
+        x = x + attn_out
         #normalize again, pass through SwiGLU-based ffn, residual connection
         x = x + self.ffn(self.norm2(x))
         #output: 576-dim vector
-        return x
+        return x, updated_kv
 
 
 class GroupedQueryAttention(nn.Module):
 
-    def __init__(self, dropout: int = 0.05):
+    def __init__(self, dropout: float = 0.05):
         super().__init__()
         self.num_q_heads = 9
         self.num_kv_heads = 3
@@ -50,9 +51,15 @@ class GroupedQueryAttention(nn.Module):
         return (x * cos) + (x_rot * sin)
     
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, kv_cache=None) -> torch.Tensor:
         #input: 576-dim vector
         B, T, _ = x.shape
+
+        #determine starting pos for rotary embeddings
+        if kv_cache is not None:
+            start_pos = kv_cache['k'].shape[2]
+        else:
+            start_pos = 0
 
         #project into Q, K, V
         q = self.q_proj(x)
@@ -65,25 +72,35 @@ class GroupedQueryAttention(nn.Module):
         v = v.view(B, T, self.num_kv_heads, self.head_dim).transpose(1,2)
 
         #apply rotary embedding to Q, K
-        cos, sin = self.rotary_emb(seq_len=T)
+        cos, sin = self.rotary_emb(seq_len=start_pos + T)
+        cos = cos[:, :, start_pos:start_pos + T, :]
+        sin = sin[:, :, start_pos:start_pos + T, :]
         q = self._apply_rotary(q, cos, sin)
         k = self._apply_rotary(k, cos, sin)
 
+        #concat kv cache if exists
+        if kv_cache is not None:
+            k = torch.cat([kv_cache['k'], k], dim=2)
+            v = torch.cat([kv_cache['v'], v], dim=2)
+
         #expansion --> turn k,v to (B, q_heads, T, head_dim)
         repeat_factor = self.num_q_heads // self.num_kv_heads
-        k = k.repeat_interleave(repeat_factor, dim=1)
-        v = v.repeat_interleave(repeat_factor, dim=1)
+        k_expanded = k.repeat_interleave(repeat_factor, dim=1)
+        v_expanded = v.repeat_interleave(repeat_factor, dim=1)
 
         #calculate attn scores
-        attn_scores = torch.matmul(q, k.transpose(-2,-1))
+        attn_scores = torch.matmul(q, k_expanded.transpose(-2,-1))
         attn_scores /= math.sqrt(self.head_dim)
 
-        mask = torch.tril(torch.ones(T, T, device=x.device)).bool()
+        full_seq_len = k.shape[2]
+        mask = torch.tril(torch.ones(full_seq_len, full_seq_len, device=x.device)).bool()
+        mask = mask[-T:, :]
+
         attn_scores = attn_scores.masked_fill(~mask, float("-inf"))
 
         attn_probs = torch.softmax(attn_scores, dim=-1)
         attn_probs = self.dropout(attn_probs)
-        c = torch.matmul(attn_probs, v)
+        c = torch.matmul(attn_probs, v_expanded)
 
         #merge heads
         c = c.transpose(1, 2).contiguous()
@@ -91,7 +108,11 @@ class GroupedQueryAttention(nn.Module):
 
         #output projection: 576-dim vector
         out = self.o_proj(c)
-        return out
+
+        #return output and updated cache
+        updated_cache = {'k': k, 'v': v}
+
+        return out, updated_cache
 
 
 class RotaryEmbedding(nn.Module):
@@ -148,7 +169,7 @@ class RotaryEmbedding(nn.Module):
 
 class SwiGLU(nn.Module):
 
-    def __init__(self, dtype=torch.bfloat16, init_std: float = 0.041666666666666664, dropout: int = 0.05):
+    def __init__(self, dtype=torch.bfloat16, init_std: float = 0.041666666666666664, dropout: float = 0.05):
         super().__init__()
         self.activation = nn.SiLU()
         self.gate_proj = nn.Linear(HIDDEN_DIM, INTERMEDIATE_DIM, bias=False, dtype=dtype)
