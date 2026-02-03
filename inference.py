@@ -30,7 +30,7 @@ def main():
 
 
 @torch.no_grad()
-def generate(model: SmolLM2, tokenizer, prompt: str, max_new_tokens: int = 50, device: str="cpu") -> str:
+def generate(model: SmolLM2, tokenizer, prompt: str, max_new_tokens: int = 200, device: str="cpu") -> str:
     
     #tokenize prompt
     encoded = tokenizer(prompt, return_tensors="pt").to(device)
@@ -39,6 +39,7 @@ def generate(model: SmolLM2, tokenizer, prompt: str, max_new_tokens: int = 50, d
     #prefill to build kv cache
     logits, kv_cache = model(input_ids, use_cache=True)
 
+    #first token
     next_token_logits = logits[:, -1, :]
     next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
     generated = torch.cat([input_ids, next_token], dim=1)
@@ -67,7 +68,7 @@ def decode_step(model: SmolLM2, input_ids: torch.Tensor, kv_cache):
 
 
 def load_model(device: str, checkpoint_path: str) -> SmolLM2:
-    model = SmolLM2().to(device)
+    model = SmolLM2().to(device).to(torch.bfloat16)
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model.eval()
     return model
