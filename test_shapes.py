@@ -16,7 +16,13 @@ torch.manual_seed(0)
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = SmolLM2().to(device).to(torch.bfloat16)
+    dtype = torch.float32
+    if device == "cuda":
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+        if hasattr(torch, "set_float32_matmul_precision"):
+            torch.set_float32_matmul_precision("high")
+    model = SmolLM2().to(device).to(dtype)
     model.eval()
 
     #forward pass (no cache)
@@ -29,6 +35,7 @@ def main():
         verbose=2,
         col_names=("input_size", "output_size", "num_params"),
     )
+    model.eval()
 
     with torch.no_grad():
         logits = model(input_ids)
