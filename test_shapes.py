@@ -93,11 +93,18 @@ def main():
 
     print(f"✓ Cache equivalence check (max diff = {max_diff:.6e})")
 
+    atol = 1e-5
+    rtol = 1e-5
+    if device == "cuda":
+        #gpu math can diverge slightly between cached vs full paths
+        atol = 1e-4
+        rtol = 1e-4
+
     assert torch.allclose(
         last_logits_full,
         last_logits_cached,
-        atol=1e-5,
-        rtol=1e-5,
+        atol=atol,
+        rtol=rtol,
     ), "Cached and non-cached logits do not match"
 
     print("\nAll shape and cache checks passed ✅")
