@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", type=str, required=True)
     parser.add_argument("--max_new_tokens", type=int, default=100)
-    parser.add_argument("--checkpoint", type=str, default="checkpoint.pt")
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/checkpoint_200000.pt")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
