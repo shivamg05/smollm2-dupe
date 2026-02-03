@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+from typing import Dict, List, Optional, Tuple, Union
 
 HIDDEN_DIM = 576
 INTERMEDIATE_DIM = 1536
@@ -14,7 +15,12 @@ class SmolLM2(nn.Module):
         self.norm = nn.RMSNorm(HIDDEN_DIM, eps=1e-5)
         self.layers = nn.ModuleList([TransformerBlock() for _ in range(30)])
     
-    def forward(self, x, kv_cache=None, use_cache=False):
+    def forward(
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[List[Dict[str, torch.Tensor]]] = None,
+        use_cache: bool = False,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[Dict[str, torch.Tensor]]]]:
         x = self.emb(x)
 
         new_kv_cache = [] if use_cache else None
@@ -46,7 +52,11 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.RMSNorm(HIDDEN_DIM, eps=1e-5)
         
     
-    def forward(self, x: torch.Tensor, kv_cache=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         #input: 576-dim vector
 
         #normalize, pass through GQA, residual connection
@@ -82,7 +92,11 @@ class GroupedQueryAttention(nn.Module):
         return (x * cos) + (x_rot * sin)
     
 
-    def forward(self, x: torch.Tensor, kv_cache=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         #input: 576-dim vector
         B, T, _ = x.shape
 
@@ -184,7 +198,7 @@ class RotaryEmbedding(nn.Module):
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
 
 
-    def forward(self, seq_len: int):
+    def forward(self, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         returns: cos, sin of shape (1, 1, seq_len, head_dim)
         """
