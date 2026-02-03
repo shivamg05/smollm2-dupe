@@ -156,19 +156,26 @@ def main():
     if device == "cuda":
         torch.cuda.manual_seed_all(SEED)
 
+    print("Loading tokenizer...")
     tokenizer = load_tokenizer()
 
     #load, tokenize data
+    print("Loading raw data...")
     data = load_data()
+    print(f"Tokenizing {len(data)} samples...")
     data = tokenize_and_chunk(data, tokenizer, seq_len=args.seq_len)
     if not data:
         raise ValueError("Tokenized data is empty; add more samples or reduce SEQ_LEN.")
+    print(f"Built {len(data)} token chunks at seq_len={args.seq_len}.")
 
+    print("Building dataloaders...")
     train_loader, val_loader = get_loaders(data, micro_batch_size=micro_batch_size)
 
+    print("Initializing model...")
     model = SmolLM2().to(device).to(DTYPE)
     loss_fn = nn.CrossEntropyLoss()
 
+    print(f"Starting training on {device} (steps={train_steps}, micro_batch_size={micro_batch_size})...")
     optimizer = torch.optim.AdamW(
         model.parameters(), 
         lr=lr, 
