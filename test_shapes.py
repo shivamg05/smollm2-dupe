@@ -1,5 +1,6 @@
 import torch
 from model import SmolLM2
+from torchinfo import summary
 
 VOCAB_SIZE = 49152
 HIDDEN_DIM = 576
@@ -20,6 +21,14 @@ def main():
 
     #forward pass (no cache)
     input_ids = torch.randint(0, VOCAB_SIZE, (B, T), device=device)
+
+    print("\nModel summary:")
+    summary(
+        model,
+        input_data=input_ids,
+        verbose=2,
+        col_names=("input_size", "output_size", "num_params"),
+    )
 
     with torch.no_grad():
         logits = model(input_ids)
