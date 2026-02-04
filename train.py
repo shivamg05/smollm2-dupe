@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from inference import load_tokenizer
 from data import load_data
 from scheduler import LinearWarmupDecay
+from itertools import cycle
 
 SEQ_LEN = 2048
 SEED = 8
@@ -56,7 +57,7 @@ def train_step(
         loss_fn,
         optimizer: torch.optim,
         scheduler,
-        device: torch.dtype,
+        device: str,
         clip_grad: float):
     
     model.train()
@@ -87,7 +88,7 @@ def eval_step(
         model: SmolLM2,
         loader: DataLoader,
         loss_fn,
-        device: torch.dtype):
+        device: str):
     
     model.eval()
     total = 0.0
@@ -134,21 +135,22 @@ def save_checkpoint(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seq_len", type=int, default=SEQ_LEN)
+    parser.add_argument("--train_steps", type=int, default=100)
     args = parser.parse_args()
 
     micro_batch_size = 8
-    train_steps = 2_000_000
+    train_steps = args.train_steps 
     lr = 3e-3
     weight_decay = 0.01
-    lr_warmup_steps = 2000
-    lr_decay_start_step = 1_600_000
-    lr_decay_steps = 400_000
+    lr_warmup_steps = 10  # Reduced for testing
+    lr_decay_start_step = 80  # Reduced for testing
+    lr_decay_steps = 20  # Reduced for testing
     min_decay_lr = 0.0
     betas = (0.9, 0.95)
     eps = 1e-8
     clip_grad = 1.0
-    ckpt_interval = 2000
-    val_check_interval = 1000
+    ckpt_interval = 50  # Reduced for testing
+    val_check_interval = 10  # Reduced for testing
     checkpoints_path = "checkpoints"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -194,24 +196,27 @@ def main():
         min_lr=min_decay_lr
     )
 
-    step = 0
-    #loop per batch/trainstep
-    while step < train_steps:
-        for batch in train_loader:
-            if step >= train_steps:
-                break
-
-            train_loss = train_step(model, batch, loss_fn, optimizer, scheduler, device, clip_grad)
-            out = f"step: {step:06d} | train {train_loss:.4f}"
-            if step % val_check_interval == 0 and step != 0:
-                val_loss = eval_step(model, val_loader, loss_fn, device)
-                out = f"step: {step:06d} | train {train_loss:.4f} | val {val_loss:.4f}"
-
-            if step % ckpt_interval == 0 and step != 0:
-                save_checkpoint(step, model, optimizer, scheduler, checkpoints_path)
+    #use itertools.cycle to infinitely repeat the dataloader
+    train_loader_infinite = cycle(train_loader)
+    
+    for step in range(train_steps):
+        batch = next(train_loader_infinite)
         
-            step += 1
-            print(out)
+        train_loss = train_step(model, batch, loss_fn, optimizer, scheduler, device, clip_grad)
+        out = f"step: {step:06d} | train {train_loss:.4f}"
+        
+        if step % val_check_interval == 0 and step != 0:
+            val_loss = eval_step(model, val_loader, loss_fn, device)
+            out = f"step: {step:06d} | train {train_loss:.4f} | val {val_loss:.4f}"
+
+        if step % ckpt_interval == 0 and step != 0:
+            save_checkpoint(step, model, optimizer, scheduler, checkpoints_path)
+    
+        print(out)
+    
+    print(f"\nTraining complete! Final step: {step}")
+
+    save_checkpoint(step, model, optimizer, scheduler, checkpoints_path)
 
 
 if __name__ == "__main__":
