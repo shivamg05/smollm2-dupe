@@ -12,12 +12,13 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    #load tokenizer
+    print(f"Loading tokenizer...")
     tokenizer = load_tokenizer()
 
-    # #load model
+    print(f"Loading model from {args.checkpoint}...")
     model = load_model(device, args.checkpoint)
 
+    print(f"Generating text...")
     output = generate(
         model=model, 
         tokenizer=tokenizer, 
@@ -26,7 +27,7 @@ def main():
         device=device
     )
 
-    print(output)
+    print(f"\nGenerated text:\n{output}")
 
 
 @torch.no_grad()
@@ -69,7 +70,13 @@ def decode_step(model: SmolLM2, input_ids: torch.Tensor, kv_cache):
 
 def load_model(device: str, checkpoint_path: str) -> SmolLM2:
     model = SmolLM2().to(device).to(torch.bfloat16)
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    if isinstance(checkpoint, dict) and "model_state" in checkpoint:
+        model.load_state_dict(checkpoint["model_state"])
+    else:
+        model.load_state_dict(checkpoint)
+    
     model.eval()
     return model
 
@@ -81,3 +88,7 @@ def load_tokenizer() -> AutoTokenizer:
         tokenizer.pad_token = tokenizer.eos_token
     
     return tokenizer
+
+
+if __name__ == "__main__":
+    main()
