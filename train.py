@@ -144,23 +144,24 @@ def save_checkpoint(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seq_len", type=int, default=128, help="Sequence length (reduced default for testing)")
-    parser.add_argument("--train_steps", type=int, default=100, help="Number of training steps")
+    parser.add_argument("--seq_len", type=int, default=SEQ_LEN)
+    parser.add_argument("--train_steps", type=int, default=2_000_000)
+    parser.add_argument("--micro_batch_size", type=int, default=8)
     args = parser.parse_args()
 
-    micro_batch_size = 2  # Reduced for small datasets
-    train_steps = args.train_steps  # Changed to use argument with sensible default
+    micro_batch_size = args.micro_batch_size
+    train_steps = args.train_steps
     lr = 3e-3
     weight_decay = 0.01
-    lr_warmup_steps = 10  # Reduced for testing
-    lr_decay_start_step = 80  # Reduced for testing
-    lr_decay_steps = 20  # Reduced for testing
+    lr_warmup_steps = 2000
+    lr_decay_start_step = 1_600_000
+    lr_decay_steps = 400_000
     min_decay_lr = 0.0
     betas = (0.9, 0.95)
     eps = 1e-8
     clip_grad = 1.0
-    ckpt_interval = 50  # Reduced for testing
-    val_check_interval = 10  # Reduced for testing
+    ckpt_interval = 2000
+    val_check_interval = 1000
     checkpoints_path = "checkpoints"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
