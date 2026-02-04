@@ -38,15 +38,25 @@ def get_loaders(x: List[torch.Tensor], micro_batch_size=8, split=0.8):
 
     x = torch.stack(x, dim=0)
     n = x.size(0)
-    split_idx = math.floor(n * split)
+    #ensure at least 1 sample for train
+    split_idx = max(1, math.floor(n * split))
 
     x_train, x_val = x[:split_idx], x[split_idx:]
+    
+    #adjust batch size if dataset is smaller
+    actual_train_batch_size = min(micro_batch_size, len(x_train))
+    actual_val_batch_size = min(micro_batch_size, max(1, len(x_val)))
+    
+    print(f"Train samples: {len(x_train)}, Val samples: {len(x_val)}")
+    print(f"Train batch size: {actual_train_batch_size}, Val batch size: {actual_val_batch_size}")
 
     train_ds = TensorDataset(x_train)
     val_ds = TensorDataset(x_val)
 
-    train_loader = DataLoader(train_ds, batch_size=micro_batch_size, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_ds, batch_size=micro_batch_size, shuffle=False)
+    #don't drop last batch for small datasets
+    drop_last = len(x_train) > micro_batch_size
+    train_loader = DataLoader(train_ds, batch_size=actual_train_batch_size, shuffle=True, drop_last=drop_last)
+    val_loader = DataLoader(val_ds, batch_size=actual_val_batch_size, shuffle=False, drop_last=False)
 
     return train_loader, val_loader
 
@@ -134,12 +144,12 @@ def save_checkpoint(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seq_len", type=int, default=SEQ_LEN)
-    parser.add_argument("--train_steps", type=int, default=100)
+    parser.add_argument("--seq_len", type=int, default=128, help="Sequence length (reduced default for testing)")
+    parser.add_argument("--train_steps", type=int, default=100, help="Number of training steps")
     args = parser.parse_args()
 
-    micro_batch_size = 8
-    train_steps = args.train_steps 
+    micro_batch_size = 2  # Reduced for small datasets
+    train_steps = args.train_steps  # Changed to use argument with sensible default
     lr = 3e-3
     weight_decay = 0.01
     lr_warmup_steps = 10  # Reduced for testing
