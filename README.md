@@ -2,6 +2,8 @@
 
 A from-scratch PyTorch implementation of [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M).
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1B4JnZ1qS6NeqEfHpGpnRyiTX64V1tJzY#scrollTo=MEL8DFLxfxEI)
+
 ## Features
 
 - Decoder-only transformer with 30 layers, 135M parameters
@@ -37,7 +39,7 @@ python train.py
 ### Generate
 
 ```bash
-python inference.py --prompt "Neural networks learn" --checkpoint checkpoints/<your final checkpoint>.pt
+python inference.py --prompt "Neural networks learn" --checkpoint checkpoints/checkpoint_002000.pt
 ```
 
 ## Architecture
